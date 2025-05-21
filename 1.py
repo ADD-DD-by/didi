@@ -58,7 +58,7 @@ if uploaded_file is not None:
             margin=dict(l=40, r=40, t=40, b=40)
         )
 
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, key=sheet_name)
 
 else:
     st.info("👆 请上传包含多个 Sheet 的 Excel 文件，每个 Sheet 都包含“体验点 / 重要度 / 满意度 / 分歧度”四列。")
