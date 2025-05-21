@@ -137,6 +137,8 @@ if uploaded_file:
         title='体验点气泡图（时间范围切换）',
         xaxis_title='重要度',
         yaxis_title='满意度',
+        xaxis=dict(showgrid=False),  # ✅ 关闭 X 网格线
+        yaxis=dict(showgrid=False),  # ✅ 关闭 Y 网格线
         plot_bgcolor='white',
         height=800,
         width=1200,
