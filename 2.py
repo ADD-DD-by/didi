@@ -144,7 +144,7 @@ if uploaded_file:
         width=1200,
         margin=dict(l=100, r=250, t=100, b=60),
         coloraxis=dict(
-            colorscale='balance',
+            colorscale='balance_r',
             colorbar=dict(
                 title="满意度",
                 tickvals=[0, 0.5, 1],
