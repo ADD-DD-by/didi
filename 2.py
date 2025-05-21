@@ -4,7 +4,7 @@ import numpy as np
 import plotly.graph_objects as go
 
 st.set_page_config(layout="wide")
-st.title("📊 体验点气泡图生成器")
+st.title("📊 评论分析看板")
 
 uploaded_file = st.file_uploader("请上传分析好的 Excel 文件（含3个工作表：近半年、近一年、近两年）", type="xlsx")
 
