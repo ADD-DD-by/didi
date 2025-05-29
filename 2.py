@@ -9,19 +9,24 @@ st.title("📊 评论分析看板")
 uploaded_file = st.file_uploader("请上传分析好的 Excel 文件（含3个工作表：近半年、近一年、近两年）", type="xlsx")
 
 if uploaded_file:
-    df_半年 = pd.read_excel(uploaded_file, sheet_name='近半年数据分析')
-    df_一年 = pd.read_excel(uploaded_file, sheet_name='近一年数据分析')
-    df_两年 = pd.read_excel(uploaded_file, sheet_name='近两年数据分析')
+    def clean_df(df, name):
+        before = len(df)
+        df_cleaned = df.dropna(subset=['重要度', '满意度', '分歧度', '体验点', '好评频率', '差评频率'])
+        st.write(f"🧹 {name} 清洗后删除了 {before - len(df_cleaned)} 行空值")
+        return df_cleaned
+
+    df_半年 = clean_df(pd.read_excel(uploaded_file, sheet_name='近半年数据分析'), "近半年")
+    df_一年 = clean_df(pd.read_excel(uploaded_file, sheet_name='近一年数据分析'), "近一年")
+    df_两年 = clean_df(pd.read_excel(uploaded_file, sheet_name='近两年数据分析'), "近两年")
 
     def normalize_satisfaction(s):
         return (s + 5) / 10
 
     def create_traces(df, period_name):
         avg_importance = df['重要度'].mean()
-        norm_satis = normalize_satisfaction(df['满意度'])
         traces = []
         unique_points = df['体验点'].unique()
-        sizeref = 2. * max(df['分歧度']) / (40. ** 2)
+        sizeref = 2. * max(df['分歧度']) / (20. ** 2)
 
         for point in unique_points:
             df_sub = df[df['体验点'] == point]
@@ -54,15 +59,6 @@ if uploaded_file:
             traces.append(trace)
         return traces, avg_importance
 
-    traces_半年, avg_半年 = create_traces(df_半年, '近半年')
-    traces_一年, avg_一年 = create_traces(df_一年, '近一年')
-    traces_两年, avg_两年 = create_traces(df_两年, '近两年')
-    all_traces = traces_半年 + traces_一年 + traces_两年
-
-    fig = go.Figure(data=all_traces)
-    for i in range(len(traces_半年)):
-        fig.data[i].visible = True
-
     def create_reference_shapes(avg_importance, df):
         return [
             dict(type='line', x0=df['重要度'].min(), x1=df['重要度'].max(), y0=0, y1=0,
@@ -79,12 +75,27 @@ if uploaded_file:
                  showarrow=True, arrowhead=1, ax=0, ay=40)
         ]
 
-    fig.update_layout(
-        shapes=create_reference_shapes(avg_半年, df_半年),
-        annotations=create_annotations(avg_半年, df_半年)
-    )
+    def create_top_annotations(df):
+        top_good = df.loc[df['好评频率'].idxmax()]
+        top_bad = df.loc[df['差评频率'].idxmax()]
+        return [
+            dict(x=top_good['重要度'], y=top_good['满意度'],
+                 text=f"👍 Top好评点: {top_good['体验点']}", showarrow=True, arrowhead=2, ax=-50, ay=-50,
+                 font=dict(color="green", size=12), arrowcolor="green"),
+            dict(x=top_bad['重要度'], y=top_bad['满意度'],
+                 text=f"👎 Top差评点: {top_bad['体验点']}", showarrow=True, arrowhead=2, ax=50, ay=50,
+                 font=dict(color="red", size=12), arrowcolor="red")
+        ]
 
-    # 切换按钮
+    traces_半年, avg_半年 = create_traces(df_半年, '近半年')
+    traces_一年, avg_一年 = create_traces(df_一年, '近一年')
+    traces_两年, avg_两年 = create_traces(df_两年, '近两年')
+    all_traces = traces_半年 + traces_一年 + traces_两年
+
+    fig = go.Figure(data=all_traces)
+    for i in range(len(traces_半年)):
+        fig.data[i].visible = True
+
     buttons = []
     lens = [len(traces_半年), len(traces_一年), len(traces_两年)]
     dfs = [df_半年, df_一年, df_两年]
@@ -102,13 +113,12 @@ if uploaded_file:
                 {'visible': vis},
                 {
                     'shapes': create_reference_shapes(avgs[i], dfs[i]),
-                    'annotations': create_annotations(avgs[i], dfs[i])
+                    'annotations': create_annotations(avgs[i], dfs[i]) + create_top_annotations(dfs[i])
                 }
             ]
         ))
         start_idx += lens[i]
 
-    # 图例说明文字
     fig.add_annotation(
         text="📘 图例说明：\n颜色表示满意度（-5 至 5）\n气泡大小表示分歧度（越大越分歧）",
         xref="paper", yref="paper",
@@ -137,8 +147,8 @@ if uploaded_file:
         title='体验点气泡图（时间范围切换）',
         xaxis_title='重要度',
         yaxis_title='满意度',
-        xaxis=dict(showgrid=False),  # ✅ 关闭 X 网格线
-        yaxis=dict(showgrid=False),  # ✅ 关闭 Y 网格线
+        xaxis=dict(showgrid=False),
+        yaxis=dict(showgrid=False),
         plot_bgcolor='white',
         height=800,
         width=1200,
@@ -174,9 +184,9 @@ if uploaded_file:
             itemsizing='constant',
             valign='top',
             orientation='v'
-        )
+        ),
+        shapes=create_reference_shapes(avg_半年, df_半年),
+        annotations=create_annotations(avg_半年, df_半年) + create_top_annotations(df_半年)
     )
 
-    # 展示图表
     st.plotly_chart(fig, use_container_width=True)
- 
