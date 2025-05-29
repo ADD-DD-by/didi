@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
+import plotly.express as px
 
 st.set_page_config(layout="wide")
 st.title("📊 评论分析看板")
@@ -11,6 +12,10 @@ uploaded_file = st.file_uploader("请上传分析好的 Excel 文件（含3个�
 if uploaded_file:
     def clean_df(df, name):
         before = len(df)
+        # 只保留关键字段为空的行
+        df['重要度'] = pd.to_numeric(df['重要度'], errors='coerce')
+        df['满意度'] = pd.to_numeric(df['满意度'], errors='coerce')
+        df['分歧度'] = pd.to_numeric(df['分歧度'], errors='coerce')
         df_cleaned = df.dropna(subset=['重要度', '满意度', '分歧度'])
         st.write(f"🧹 {name} 清洗后删除了 {before - len(df_cleaned)} 行空值")
         return df_cleaned
@@ -87,6 +92,7 @@ if uploaded_file:
                  font=dict(color="red", size=12), arrowcolor="red")
         ]
 
+    # ✅ 气泡图主流程
     traces_半年, avg_半年 = create_traces(df_半年, '近半年')
     traces_一年, avg_一年 = create_traces(df_一年, '近一年')
     traces_两年, avg_两年 = create_traces(df_两年, '近两年')
@@ -144,7 +150,7 @@ if uploaded_file:
                 showactive=True
             )
         ],
-        title='体验点气泡图（时间范围切换）',
+        title='🔥体验点气泡图（时间范围切换）',
         xaxis_title='重要度',
         yaxis_title='满意度',
         xaxis=dict(showgrid=False),
@@ -190,3 +196,39 @@ if uploaded_file:
     )
 
     st.plotly_chart(fig, use_container_width=True)
+
+    # ✅ Top痛点条形图展示
+    st.subheader("🔥 Top10 痛点条形图展示")
+
+    def show_top_pain_bar(df, period_name):
+        col_name = 'Top痛点'  # 替换为你真实字段名
+        if col_name in df.columns:
+            df_sorted = df.sort_values(by=col_name, ascending=False).head(10)
+            fig = px.bar(
+                df_sorted,
+                x=col_name,
+                y='体验点',
+                orientation='h',
+                color=col_name,
+                color_continuous_scale='Reds',
+                title=f"{period_name} Top10 痛点",
+                height=400
+            )
+            fig.update_layout(
+                xaxis_title='痛点评分',
+                yaxis_title='体验点',
+                coloraxis_showscale=False,
+                margin=dict(l=80, r=20, t=40, b=40)
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning(f"{period_name} 数据中未找到字段 '{col_name}'，请检查列名")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        show_top_pain_bar(df_半年, "近半年")
+    with col2:
+        show_top_pain_bar(df_一年, "近一年")
+    with col3:
+        show_top_pain_bar(df_两年, "近两年")
