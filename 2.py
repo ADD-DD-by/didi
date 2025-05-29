@@ -11,7 +11,7 @@ uploaded_file = st.file_uploader("请上传分析好的 Excel 文件（含3个�
 if uploaded_file:
     def clean_df(df, name):
         before = len(df)
-        df_cleaned = df.dropna(subset=['重要度', '满意度', '分歧度', '体验点', '好评频率', '差评频率'])
+        df_cleaned = df.dropna(subset=['重要度', '满意度', '分歧度'])
         st.write(f"🧹 {name} 清洗后删除了 {before - len(df_cleaned)} 行空值")
         return df_cleaned
 
