@@ -20,7 +20,7 @@ if uploaded_file:
         st.write(f"🧹 {name} 清洗后删除了 {before - len(df_cleaned)} 行空值")
         return df_cleaned
 
-    # 读取所有可用 sheet
+    # 检查可用工作表
     xls = pd.ExcelFile(uploaded_file)
     available_sheets = xls.sheet_names
     st.info(f"📘 检测到以下工作表: {', '.join(available_sheets)}")
@@ -106,7 +106,7 @@ if uploaded_file:
                  font=dict(color="red", size=12), arrowcolor="red")
         ]
 
-    # ✅ 只处理存在的 sheet
+    # ✅ 构建数据列表
     period_labels = {
         '近半年数据分析': '近半年',
         '近一年数据分析': '近一年',
@@ -117,27 +117,28 @@ if uploaded_file:
     lens = []
     dfs_ordered = []
     avgs_ordered = []
+
     for sheet, label in period_labels.items():
         if sheet in dfs:
             df = dfs[sheet]
             traces, avg = create_traces(df, label)
             traces_all.extend(traces)
             lens.append(len(traces))
-            dfs_ordered.append(df)
+            dfs_ordered.append((df, label))  # ✅ 存储成 (df, label)
             avgs_ordered.append(avg)
 
     if not traces_all:
         st.error("❌ 没有任何可绘制的数据。")
         st.stop()
 
+    # ✅ 绘制气泡图
     fig = go.Figure(data=traces_all)
     for i in range(lens[0]):
         fig.data[i].visible = True
 
     buttons = []
     start_idx = 0
-    for i, df in enumerate(dfs_ordered):
-        label = list(period_labels.values())[i]
+    for i, (df, label) in enumerate(dfs_ordered):
         vis = [False] * len(traces_all)
         for j in range(lens[i]):
             vis[start_idx + j] = True
@@ -167,7 +168,6 @@ if uploaded_file:
         opacity=0.9
     )
 
-    # 取第一个存在的数据集作初始视图
     fig.update_layout(
         updatemenus=[dict(
             buttons=buttons,
@@ -178,7 +178,7 @@ if uploaded_file:
             direction='down',
             showactive=True
         )],
-        title='🔥体验点气泡图（时间范围切换）',
+        title='🔥 体验点气泡图（时间范围切换）',
         xaxis_title='重要度',
         yaxis_title='满意度',
         xaxis=dict(showgrid=False),
@@ -217,8 +217,8 @@ if uploaded_file:
             valign='top',
             orientation='v'
         ),
-        shapes=create_reference_shapes(avgs_ordered[0], dfs_ordered[0]),
-        annotations=create_annotations(avgs_ordered[0], dfs_ordered[0]) + create_top_annotations(dfs_ordered[0])
+        shapes=create_reference_shapes(avgs_ordered[0], dfs_ordered[0][0]),
+        annotations=create_annotations(avgs_ordered[0], dfs_ordered[0][0]) + create_top_annotations(dfs_ordered[0][0])
     )
 
     st.plotly_chart(fig, use_container_width=True)
