@@ -7,12 +7,12 @@ import plotly.express as px
 st.set_page_config(layout="wide")
 st.title("📊 评论分析看板")
 
-uploaded_file = st.file_uploader("请上传分析好的 Excel 文件（含3个工作表：近半年、近一年、近两年）", type="xlsx")
+uploaded_file = st.file_uploader("请上传分析好的 Excel 文件（含 1~3 个工作表：近半年、近一年、近两年）", type="xlsx")
 
 if uploaded_file:
+
     def clean_df(df, name):
         before = len(df)
-        # 只保留关键字段为空的行
         df['重要度'] = pd.to_numeric(df['重要度'], errors='coerce')
         df['满意度'] = pd.to_numeric(df['满意度'], errors='coerce')
         df['分歧度'] = pd.to_numeric(df['分歧度'], errors='coerce')
@@ -20,9 +20,21 @@ if uploaded_file:
         st.write(f"🧹 {name} 清洗后删除了 {before - len(df_cleaned)} 行空值")
         return df_cleaned
 
-    df_半年 = clean_df(pd.read_excel(uploaded_file, sheet_name='近半年数据分析'), "近半年")
-    df_一年 = clean_df(pd.read_excel(uploaded_file, sheet_name='近一年数据分析'), "近一年")
-    df_两年 = clean_df(pd.read_excel(uploaded_file, sheet_name='近两年数据分析'), "近两年")
+    # 读取所有可用 sheet
+    xls = pd.ExcelFile(uploaded_file)
+    available_sheets = xls.sheet_names
+    st.info(f"📘 检测到以下工作表: {', '.join(available_sheets)}")
+
+    dfs = {}
+    for sheet in ['近半年数据分析', '近一年数据分析', '近两年数据分析']:
+        if sheet in available_sheets:
+            dfs[sheet] = clean_df(pd.read_excel(xls, sheet_name=sheet), sheet)
+        else:
+            st.warning(f"⚠️ 文件中未找到工作表：{sheet}，已跳过。")
+
+    if not dfs:
+        st.error("❌ 文件中未包含任何有效的数据工作表，请检查文件内容。")
+        st.stop()
 
     def normalize_satisfaction(s):
         return (s + 5) / 10
@@ -31,7 +43,7 @@ if uploaded_file:
         avg_importance = df['重要度'].mean()
         traces = []
         unique_points = df['体验点'].unique()
-        sizeref = 2. * max(df['分歧度']) / (20. ** 2)
+        sizeref = 2. * max(df['分歧度']) / (20. ** 2) if len(df) > 0 else 1
 
         for point in unique_points:
             df_sub = df[df['体验点'] == point]
@@ -81,6 +93,8 @@ if uploaded_file:
         ]
 
     def create_top_annotations(df):
+        if '好评频率' not in df.columns or '差评频率' not in df.columns:
+            return []
         top_good = df.loc[df['好评频率'].idxmax()]
         top_bad = df.loc[df['差评频率'].idxmax()]
         return [
@@ -92,24 +106,39 @@ if uploaded_file:
                  font=dict(color="red", size=12), arrowcolor="red")
         ]
 
-    # ✅ 气泡图主流程
-    traces_半年, avg_半年 = create_traces(df_半年, '近半年')
-    traces_一年, avg_一年 = create_traces(df_一年, '近一年')
-    traces_两年, avg_两年 = create_traces(df_两年, '近两年')
-    all_traces = traces_半年 + traces_一年 + traces_两年
+    # ✅ 只处理存在的 sheet
+    period_labels = {
+        '近半年数据分析': '近半年',
+        '近一年数据分析': '近一年',
+        '近两年数据分析': '近两年'
+    }
 
-    fig = go.Figure(data=all_traces)
-    for i in range(len(traces_半年)):
+    traces_all = []
+    lens = []
+    dfs_ordered = []
+    avgs_ordered = []
+    for sheet, label in period_labels.items():
+        if sheet in dfs:
+            df = dfs[sheet]
+            traces, avg = create_traces(df, label)
+            traces_all.extend(traces)
+            lens.append(len(traces))
+            dfs_ordered.append(df)
+            avgs_ordered.append(avg)
+
+    if not traces_all:
+        st.error("❌ 没有任何可绘制的数据。")
+        st.stop()
+
+    fig = go.Figure(data=traces_all)
+    for i in range(lens[0]):
         fig.data[i].visible = True
 
     buttons = []
-    lens = [len(traces_半年), len(traces_一年), len(traces_两年)]
-    dfs = [df_半年, df_一年, df_两年]
-    avgs = [avg_半年, avg_一年, avg_两年]
-
     start_idx = 0
-    for i, label in enumerate(['近半年', '近一年', '近两年']):
-        vis = [False] * len(all_traces)
+    for i, df in enumerate(dfs_ordered):
+        label = list(period_labels.values())[i]
+        vis = [False] * len(traces_all)
         for j in range(lens[i]):
             vis[start_idx + j] = True
         buttons.append(dict(
@@ -118,8 +147,8 @@ if uploaded_file:
             args=[
                 {'visible': vis},
                 {
-                    'shapes': create_reference_shapes(avgs[i], dfs[i]),
-                    'annotations': create_annotations(avgs[i], dfs[i]) + create_top_annotations(dfs[i])
+                    'shapes': create_reference_shapes(avgs_ordered[i], df),
+                    'annotations': create_annotations(avgs_ordered[i], df) + create_top_annotations(df)
                 }
             ]
         ))
@@ -138,18 +167,17 @@ if uploaded_file:
         opacity=0.9
     )
 
+    # 取第一个存在的数据集作初始视图
     fig.update_layout(
-        updatemenus=[
-            dict(
-                buttons=buttons,
-                active=0,
-                x=0.98, y=1.12,
-                xanchor='right',
-                yanchor='top',
-                direction='down',
-                showactive=True
-            )
-        ],
+        updatemenus=[dict(
+            buttons=buttons,
+            active=0,
+            x=0.98, y=1.12,
+            xanchor='right',
+            yanchor='top',
+            direction='down',
+            showactive=True
+        )],
         title='🔥体验点气泡图（时间范围切换）',
         xaxis_title='重要度',
         yaxis_title='满意度',
@@ -173,8 +201,7 @@ if uploaded_file:
                 x=1.35,
                 xanchor='left'
             ),
-            cmin=0,
-            cmax=1,
+            cmin=0, cmax=1,
         ),
         legend=dict(
             title='体验点',
@@ -182,8 +209,7 @@ if uploaded_file:
             bgcolor='rgba(255,255,255,0.95)',
             bordercolor='lightgray',
             borderwidth=1,
-            x=1.02,
-            y=0.99,
+            x=1.02, y=0.99,
             xanchor='left',
             yanchor='top',
             font=dict(size=11),
@@ -191,8 +217,8 @@ if uploaded_file:
             valign='top',
             orientation='v'
         ),
-        shapes=create_reference_shapes(avg_半年, df_半年),
-        annotations=create_annotations(avg_半年, df_半年) + create_top_annotations(df_半年)
+        shapes=create_reference_shapes(avgs_ordered[0], dfs_ordered[0]),
+        annotations=create_annotations(avgs_ordered[0], dfs_ordered[0]) + create_top_annotations(dfs_ordered[0])
     )
 
     st.plotly_chart(fig, use_container_width=True)
@@ -201,7 +227,7 @@ if uploaded_file:
     st.subheader("🔥 Top10 痛点条形图展示")
 
     def show_top_pain_bar(df, period_name):
-        col_name = 'Top痛点'  # 替换为你真实字段名
+        col_name = 'Top痛点'
         if col_name in df.columns:
             df_sorted = df.sort_values(by=col_name, ascending=False).head(10)
             fig = px.bar(
@@ -224,11 +250,7 @@ if uploaded_file:
         else:
             st.warning(f"{period_name} 数据中未找到字段 '{col_name}'，请检查列名")
 
-    col1, col2, col3 = st.columns(3)
-
-    with col1:
-        show_top_pain_bar(df_半年, "近半年")
-    with col2:
-        show_top_pain_bar(df_一年, "近一年")
-    with col3:
-        show_top_pain_bar(df_两年, "近两年")
+    cols = st.columns(len(dfs_ordered))
+    for col, (df, label) in zip(cols, dfs_ordered):
+        with col:
+            show_top_pain_bar(df, label)
